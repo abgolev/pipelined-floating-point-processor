@@ -1,6 +1,3 @@
-//Team 47
-//Atanas Golev, Tyler Lawson, Matthew Tarter
-
 //System Level Stuff (word sizes, memory sizes, etc.)
 `define WORD  [15:0]
 `define REGSIZE [15:0]

@@ -74,7 +74,7 @@ module processor(halt, reset, clk);
         reg `WORD ir_in0, ir_in1, ir_in2, ir_inF, ir_in3;
         reg `WORD PC_in0, PC_in1, PC_in2, PC_inF, PC_in3;
         reg `WORD outputVal; //write output to ALU or MEM
-        reg `WORD op1, op2
+        reg `WORD op1, op2;
 	reg `WORD op1_prev, op2_prev; //used for the float stage
         reg `WORD op2_prev_opp, op2_opp; //just in case... used for itof
 

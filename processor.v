@@ -32,8 +32,8 @@
 `define OPsub 5'b10001
 `define OPsys 5'b10011
 `define OPpre 2'b11
-`define OPaddf 5'b00001  //not implemented yet
-`define OPsubf 5'b10010  //not implemented yet
+`define OPaddf 5'b00001  
+`define OPsubf 5'b10010
 `define OPitof 5'b00110
 `define OPftoi 5'b00101
 `define OPmulf 5'b01010
@@ -78,14 +78,21 @@ module processor(halt, reset, clk);
 	reg `WORD op1_prev, op2_prev; //used for the float stage
         reg `WORD op2_prev_opp, op2_opp; //just in case... used for itof
 
-        //Used for counting lead zeroes; leadzeroes2 used for mulf
+        //Used for float functions
+        reg `WORD shift, mantissa;
+
+       //Used for addf and subf
+        reg[7:0] shiftdif, shiftdif2;
+        reg[7:0] mantissa1, mantissa2;
+        reg[8:0] mantsum;
+        reg[7:0] by1, by2, by4;
+        reg[2:0] leadzeroes_addf;
+
+       //Used for counting lead zeroes
         reg[7:0] s8;
         reg[3:0] s4;
         reg[1:0] s2;
-        reg[4:0] leadzeroes, leadzeroes2;
-
-        //Used for ftoi
-        reg `WORD shift, mantissa;
+        reg[4:0] leadzeroes;
 
         //Used for mulf
         reg[15:0]  bigmantissa;
@@ -103,7 +110,7 @@ Stage 0 (owns PC)
       //set Z-flag
       if ((ir_in0 `CC == `S) && (ir_in0[15:14]!=2'b11) && (!init)) Zflag = !outputVal;
 
-      //process jmps
+      //process jumps
       if(ir_in0 `Dest == 4'b1111 && ir_in0[15:14]!=2'b11) begin
           PC_in0 <= outputVal+1;
           PC_in1 <= outputVal;
@@ -200,7 +207,7 @@ Stage 2
           op2_prev <= {{12{ir_in2[3]}}, ir_in2 `Op2};
           op2_prev_opp <= -{{12{ir_in2[3]}}, ir_in2 `Op2};
         end
-    
+      
       ir_inF <= ir_in2;
       PC_inF <= PC_in2;
   end
@@ -212,10 +219,49 @@ Stage 2.5
 */
   always @(posedge clk) begin
 
+      if(ir_inF `Opcode == `OPaddf || ir_inF `Opcode == `OPsubf) begin
+             //check which is smaller between op1_prev[14:7] and op2_prev[14:7], then barrel shift by difference
+            shiftdif = op1_prev[14:7]-op2_prev[14:7];
+            shiftdif2 = op2_prev[14:7]-op1_prev[14:7];
+             if(op1_prev[15:0]==0 || op2_prev[15:0]==0) begin  //if a denormalized 0 is included
+                 if(op1_prev[15:0]==0 && op2_prev[15:0]==0) begin
+                   mantissa1<=0;
+                   mantissa2<=0;
+                   shift<=0;
+                 end else if(op1_prev[15:0]==0) begin
+                    mantissa1<=0;
+                    mantissa2<={1'b1, op2_prev[6:0]};
+                    shift <= op2_prev[14:7];
+                 end else begin
+                    mantissa1<={1'b1, op1_prev[6:0]};
+                    mantissa2<=0; 
+                    shift <= op1_prev[14:7];
+                 end
+             end else if(shiftdif==0) begin 
+                 mantissa1 <= {1'b1, op1_prev[6:0]};
+                 mantissa2 <= {1'b1, op2_prev[6:0]};
+                 shift <= op1_prev[14:7];
+             end else if(shiftdif[7]==1'b0) begin     //if shiftdif is positive
+                 by1 = (shiftdif[0] ? {2'b01, op2_prev[6:1]} : {1'b1, op2_prev[6:0]});
+                 by2 = (shiftdif[1] ? {3'b001, op2_prev[6:2]} : by1);
+                 by4 = (shiftdif[2] ? {5'b00001, op2_prev[6:4]} : by2);
+                 mantissa2 = {1'b1, (shiftdif[7:3] ? 0 : by4)};
+                 mantissa1 <= {1'b1, op1_prev[6:0]};
+                 shift <= op1_prev[14:7];
+             end else begin
+                 by1 = (shiftdif2[0] ? {2'b01, op1_prev[6:1]} : {1'b1, op1_prev[6:0]});
+                 by2 = (shiftdif2[1] ? {3'b001, op1_prev[6:2]} : by1);
+                 by4 = (shiftdif2[2] ? {5'b00001, op1_prev[6:4]} : by2);
+                 mantissa1 <= {1'b1, (shiftdif2[7:3] ? 0 : by4)};
+                 mantissa2 <= {1'b1, op2_prev[6:0]};
+                 shift <= op2_prev[14:7];
+             end 
+      end
+
       //count lead zeroes
       if(ir_inF `Opcode == `OPitof) begin
           if(op2_prev[15:0] == 0) begin
-            leadzeroes=5'b1000;
+            leadzeroes<=5'b1000;
           end else if (op2_prev[15]==0) begin
             leadzeroes[4] =0;
             {leadzeroes[3],s8} = ((|op2_prev[15:8]) ? {1'b0, op2_prev[15:8]} : {1'b1, op2_prev[7:0]});
@@ -237,7 +283,7 @@ Stage 2.5
              shift <= (op2_prev[14:7] - 134);
       end
 
-      //store mantiss and exp; count lead zeroes
+      //store mantissa and exp; count lead zeroes
       if(ir_inF `Opcode == `OPmulf) begin
              bigmantissa = {1'b1, op2_prev[6:0]} * {1'b1, op1_prev[6:0]};
              shift <= (op2_prev[14:7] - 134) + (op1_prev[14:7] - 134);
@@ -260,9 +306,9 @@ Stage 2.5
              
       end
 
-      //one step delay for nonfloats
+      //nonfloats just chill
       op1 <= op1_prev;
-      op2 <= op2_prev;  
+      op2 <= ( (ir_inF `Opcode == `OPsubf) ? ({!op2_prev[15], op2_prev[14:0]}) : (op2_prev));  //sign negated for subf; same otherwise
       op2_opp <= op2_prev_opp;
       ir_in3 <= ir_inF;
       PC_in3 <= PC_inF;
@@ -291,6 +337,62 @@ Stage 3
         `OPsha: begin outputVal<=((op2>0) ? (op1 << op2) : (op1 >> -1*op2)); regWrite<=1; end
         `OPstr: begin datamem[op2] <= regfile[ir_in3 `Dest]; regWrite<=0; end
         `OPldr: begin outputVal<=datamem[op2]; regWrite<=1; end
+
+        `OPaddf: begin
+
+              if(op1[15] ^ op2[15]) begin //if the two values have different signs
+                if(mantissa1 > mantissa2) begin
+                   mantsum = mantissa1 - mantissa2;
+                   outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
+                end else begin
+                   mantsum = mantissa2 - mantissa1;
+                   outputVal[15] <= ((op1[15]==1'b1) ? (1'b0) : (1'b1));
+                end
+              end else begin
+                outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
+                mantsum = mantissa1 + mantissa2;
+              end
+
+             if(mantsum[8]==1'b1) begin
+                leadzeroes_addf = 0;
+             end else begin
+               {leadzeroes_addf[2],s4} = ((|mantsum[7:4]) ? {1'b0, mantsum[7:4]} : {1'b1, mantsum[3:0]});
+               {leadzeroes_addf[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
+               leadzeroes_addf[0] = !s2[1];
+             end
+               
+             outputVal[6:0] <= ((mantsum[8]==1'b1) ? (mantsum >> 1) : (mantsum << leadzeroes_addf)); //-1 lead zeroes in first case
+             outputVal[14:7] <= shift - leadzeroes_addf + (mantsum[8]==1'b1);
+
+         end
+
+         `OPsubf: begin
+
+              if(op1[15] ^ op2[15]) begin //if the two values have different signs
+                if(mantissa1 > mantissa2) begin
+                   mantsum = mantissa1 - mantissa2;
+                   outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
+                end else begin
+                   mantsum = mantissa2 - mantissa1;
+                   outputVal[15] <= ((op1[15]==1'b1) ? (1'b0) : (1'b1));
+                end
+              end else begin
+                outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
+                mantsum = mantissa1 + mantissa2;
+              end
+
+             if(mantsum[8]==1'b1) begin
+                leadzeroes_addf = 0;
+             end else begin
+               {leadzeroes_addf[2],s4} = ((|mantsum[7:4]) ? {1'b0, mantsum[7:4]} : {1'b1, mantsum[3:0]});
+               {leadzeroes_addf[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
+               leadzeroes_addf[0] = !s2[1];
+             end
+               
+             outputVal[6:0] <= ((mantsum[8]==1'b1) ? (mantsum >> 1) : (mantsum << leadzeroes_addf)); //-1 lead zeroes in first case
+             outputVal[14:7] <= shift - leadzeroes_addf + (mantsum[8]==1'b1);
+
+         end
 
 	//conversion from integer to float based on whether value is 0, positive, or negative
         `OPitof: begin 
@@ -371,8 +473,8 @@ reg clk = 0;
 wire halted;
 processor PE(halted,reset,clk);
 initial begin
-    $dumpfile;                                
-    $dumpvars(0,PE);                    
+    $dumpfile;                                             
+    $dumpvars(0,PE);       
     $dumpvars(0, PE, PE.regfile[0],PE.regfile[1],PE.regfile[2], PE.regfile[3]);      
     #10 reset = 1;
     #10 reset = 0;

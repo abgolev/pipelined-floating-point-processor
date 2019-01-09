@@ -13,7 +13,7 @@
 `define EQ 2'b10
 `define NE 2'b11
 `define isReg [8]
-`define Dest  [7:4]
+`define Dest [7:4]
 `define Op2 [3:0]
 
 //OPcodes w/ matching State #s
@@ -76,10 +76,11 @@ module processor(halt, reset, clk);
         reg `WORD outputVal; //write output to ALU or MEM
         reg `WORD op1, op2;
 	reg `WORD op1_prev, op2_prev; //used for the float stage
-        reg `WORD op2_prev_opp, op2_opp; //just in case... used for itof
+        reg `WORD op2_prev_opp, op2_opp; //used for itof
 
         //Used for float functions
-        reg `WORD shift, mantissa;
+        reg `WORD mantissa;
+        reg[7:0] shift;
 
        //Used for addf and subf
         reg[7:0] shiftdif, shiftdif2;
@@ -88,14 +89,11 @@ module processor(halt, reset, clk);
         reg[7:0] by1, by2, by4;
         reg[2:0] leadzeroes_addf;
 
-       //Used for counting lead zeroes
+       //Used for counting lead zeroes in float functions
         reg[7:0] s8;
         reg[3:0] s4;
         reg[1:0] s2;
         reg[4:0] leadzeroes;
-
-        //Used for mulf
-        reg[15:0]  bigmantissa;
        
 /*
 Stage 0 (owns PC)
@@ -136,7 +134,6 @@ Stage 1
 */
 
     always @(posedge clk) begin
-  
       //set PRE val
       if (instrmem[PC_in1-frz][15:14] == 2'b11) begin
           PREval<=instrmem[PC_in1-frz][11:0];
@@ -145,7 +142,6 @@ Stage 1
               ir_in2 <= instrmem[PC_in1-frz];
               PC_in2 <= PC_in1;
            end
-
       end else if (ir_in0 `Dest == 4'b1111) begin
             #0;	 //do nothing. this is neccessary because it gets confused with the 2'b11 in the PRE instruction
 
@@ -188,7 +184,6 @@ Stage 2
   always @(posedge clk) begin
 
        if(ir_in2[15:14] ==`OPpre) PREflag<=1;
-
        op1_prev <= regfile[ir_in2 `Dest];
 
 	//Op2 is reg
@@ -218,7 +213,7 @@ Stage 2.5
 -all other instrs just chill
 */
   always @(posedge clk) begin
-
+      //barrel shifts to denormalize mantissa of value with the higher exponent (shift)
       if(ir_inF `Opcode == `OPaddf || ir_inF `Opcode == `OPsubf) begin
              //check which is smaller between op1_prev[14:7] and op2_prev[14:7], then barrel shift by difference
             shiftdif = op1_prev[14:7]-op2_prev[14:7];
@@ -279,16 +274,17 @@ Stage 2.5
  
       //store mantissa and exp
       if(ir_inF `Opcode == `OPftoi) begin
+             //mantissa <= ( (op2_prev[15] == 1'b0) ? {9'b000000001, op2_prev[6:0]} : {9'b111111111, op2_prev[6:0]} ); //lead ones if it's a negative number
              mantissa <= {1'b1, op2_prev[6:0]};
              shift <= (op2_prev[14:7] - 134);
       end
 
       //store mantissa and exp; count lead zeroes
       if(ir_inF `Opcode == `OPmulf) begin
-             bigmantissa = {1'b1, op2_prev[6:0]} * {1'b1, op1_prev[6:0]};
+             mantissa = {1'b1, op2_prev[6:0]} * {1'b1, op1_prev[6:0]};
              shift <= (op2_prev[14:7] - 134) + (op1_prev[14:7] - 134);
              leadzeroes[4] =0;
-             {leadzeroes[3],s8} = ((|bigmantissa[15:8]) ? {1'b0, bigmantissa[15:8]} : {1'b1, bigmantissa[7:0]});
+             {leadzeroes[3],s8} = ((|mantissa[15:8]) ? {1'b0, mantissa[15:8]} : {1'b1, mantissa[7:0]});
              {leadzeroes[2],s4} = ((|s8[7:4]) ? {1'b0, s8[7:4]} : {1'b1, s8[3:0]});
              {leadzeroes[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
              leadzeroes[0] = !s2[1];
@@ -308,7 +304,7 @@ Stage 2.5
 
       //nonfloats just chill
       op1 <= op1_prev;
-      op2 <= ( (ir_inF `Opcode == `OPsubf) ? ({!op2_prev[15], op2_prev[14:0]}) : (op2_prev));  //sign negated for subf; same otherwise
+      op2 <= ( (ir_inF `Opcode == `OPsubf) ? ({!op2_prev[15], op2_prev[14:0]}) : (op2_prev));  //sign negated for subf
       op2_opp <= op2_prev_opp;
       ir_in3 <= ir_inF;
       PC_in3 <= PC_inF;
@@ -339,7 +335,6 @@ Stage 3
         `OPldr: begin outputVal<=datamem[op2]; regWrite<=1; end
 
         `OPaddf: begin
-
               if(op1[15] ^ op2[15]) begin //if the two values have different signs
                 if(mantissa1 > mantissa2) begin
                    mantsum = mantissa1 - mantissa2;
@@ -351,7 +346,7 @@ Stage 3
               end else begin
                 outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
                 mantsum = mantissa1 + mantissa2;
-              end
+             end
 
              if(mantsum[8]==1'b1) begin
                 leadzeroes_addf = 0;
@@ -360,14 +355,13 @@ Stage 3
                {leadzeroes_addf[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
                leadzeroes_addf[0] = !s2[1];
              end
-               
+
              outputVal[6:0] <= ((mantsum[8]==1'b1) ? (mantsum >> 1) : (mantsum << leadzeroes_addf)); //-1 lead zeroes in first case
              outputVal[14:7] <= shift - leadzeroes_addf + (mantsum[8]==1'b1);
-
          end
 
+         //same exact thing as addf
          `OPsubf: begin
-
               if(op1[15] ^ op2[15]) begin //if the two values have different signs
                 if(mantissa1 > mantissa2) begin
                    mantsum = mantissa1 - mantissa2;
@@ -391,7 +385,6 @@ Stage 3
                
              outputVal[6:0] <= ((mantsum[8]==1'b1) ? (mantsum >> 1) : (mantsum << leadzeroes_addf)); //-1 lead zeroes in first case
              outputVal[14:7] <= shift - leadzeroes_addf + (mantsum[8]==1'b1);
-
          end
 
 	//conversion from integer to float based on whether value is 0, positive, or negative
@@ -419,17 +412,17 @@ Stage 3
               if(op2[15]==0) begin
                 outputVal[14:0] <= ((shift[7]==0) ? (mantissa << shift) : (mantissa >> -shift));
               end else begin
-                outputVal[14:0] <= ((shift[7]==0) ? (-mantissa << shift) : (-mantissa >> -shift));
+                outputVal[14:0] <= ((shift[7]==0) ? (-(mantissa << shift)) : (-(mantissa >> -shift)));
               end
             end
          end  
 
 	//float multiplication
         `OPmulf: begin 
-             if(bigmantissa==0) begin
+             if(mantissa==0) begin
                 outputVal<=0;
              end else begin
-                 outputVal[6:0] <= bigmantissa >> (8-leadzeroes);
+                 outputVal[6:0] <= mantissa >> (8-leadzeroes);
                  outputVal[14:7] <= shift + (8 - leadzeroes +134);
                  outputVal[15] <= op1[15]^op2[15];
              end
@@ -459,7 +452,7 @@ Stage 3
     end
 
     //avoid infinite loops
-    if(PC_in0==2000) begin
+    if(PC_in0==10000) begin
       halt<=1;
     end
     

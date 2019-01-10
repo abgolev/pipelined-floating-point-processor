@@ -336,8 +336,34 @@ Stage 3
 */
   always @(posedge clk) begin
     //if statement to check for first time around
-    if(ir_in3 === 16'bxxxxxxxxxxxxxxxx || ir_in3 === 16'b1xxxxxxxxxxxxxxx || ir_in3 [15:14] == `OPpre) begin #0; end 
-    else begin case (ir_in3 `Opcode) 
+    if(ir_in3 === 16'bxxxxxxxxxxxxxxxx || ir_in3 === 16'b1xxxxxxxxxxxxxxx || ir_in3 [15:14] == `OPpre) begin 
+       #0;
+    end else if (ir_in3 `Opcode == `OPaddf || ir_in3 `Opcode == `OPsubf) begin //same process for addf and subf
+        if(op1[15] ^ op2[15]) begin //if the two values have different signs
+           if(mantissa1 > mantissa2) begin
+              mantsum = mantissa1 - mantissa2;
+              outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
+           end else begin
+              mantsum = mantissa2 - mantissa1;
+              outputVal[15] <= ((op1[15]==1'b1) ? (1'b0) : (1'b1));
+           end
+         end else begin
+           outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
+           mantsum = mantissa1 + mantissa2;
+        end
+
+        if(mantsum[8]==1'b1) begin
+           leadzeroes_addf = 0;
+        end else begin
+          {leadzeroes_addf[2],s4} = ((|mantsum[7:4]) ? {1'b0, mantsum[7:4]} : {1'b1, mantsum[3:0]});
+          {leadzeroes_addf[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
+          leadzeroes_addf[0] = !s2[1];
+        end
+
+        outputVal[6:0] <= ((mantsum[8]==1'b1) ? (mantsum >> 1) : (mantsum << leadzeroes_addf)); //-1 lead zeroes in first case
+        outputVal[14:7] <= shift - leadzeroes_addf + (mantsum[8]==1'b1);
+
+    end else begin case (ir_in3 `Opcode) 
         `OPadd: begin outputVal<=op1+op2; regWrite<=1; end
         `OPsub: begin outputVal<=op1-op2; regWrite<=1; end
         `OPmul: begin outputVal<=op1*op2; regWrite<=1; end
@@ -351,59 +377,6 @@ Stage 3
         `OPsha: begin outputVal<=((op2>0) ? (op1 << op2) : (op1 >> -1*op2)); regWrite<=1; end
         `OPstr: begin datamem[op2] <= regfile[ir_in3 `Dest]; regWrite<=0; end
         `OPldr: begin outputVal<=datamem[op2]; regWrite<=1; end
-
-        `OPaddf: begin
-              if(op1[15] ^ op2[15]) begin //if the two values have different signs
-                if(mantissa1 > mantissa2) begin
-                   mantsum = mantissa1 - mantissa2;
-                   outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
-                end else begin
-                   mantsum = mantissa2 - mantissa1;
-                   outputVal[15] <= ((op1[15]==1'b1) ? (1'b0) : (1'b1));
-                end
-              end else begin
-                outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
-                mantsum = mantissa1 + mantissa2;
-             end
-
-             if(mantsum[8]==1'b1) begin
-                leadzeroes_addf = 0;
-             end else begin
-               {leadzeroes_addf[2],s4} = ((|mantsum[7:4]) ? {1'b0, mantsum[7:4]} : {1'b1, mantsum[3:0]});
-               {leadzeroes_addf[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
-               leadzeroes_addf[0] = !s2[1];
-             end
-
-             outputVal[6:0] <= ((mantsum[8]==1'b1) ? (mantsum >> 1) : (mantsum << leadzeroes_addf)); //-1 lead zeroes in first case
-             outputVal[14:7] <= shift - leadzeroes_addf + (mantsum[8]==1'b1);
-         end
-
-         //same exact thing as addf
-         `OPsubf: begin
-              if(op1[15] ^ op2[15]) begin //if the two values have different signs
-                if(mantissa1 > mantissa2) begin
-                   mantsum = mantissa1 - mantissa2;
-                   outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
-                end else begin
-                   mantsum = mantissa2 - mantissa1;
-                   outputVal[15] <= ((op1[15]==1'b1) ? (1'b0) : (1'b1));
-                end
-              end else begin
-                outputVal[15] <= ((op1[15]==1'b1) ? (1'b1) : (1'b0));
-                mantsum = mantissa1 + mantissa2;
-              end
-
-             if(mantsum[8]==1'b1) begin
-                leadzeroes_addf = 0;
-             end else begin
-               {leadzeroes_addf[2],s4} = ((|mantsum[7:4]) ? {1'b0, mantsum[7:4]} : {1'b1, mantsum[3:0]});
-               {leadzeroes_addf[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
-               leadzeroes_addf[0] = !s2[1];
-             end
-               
-             outputVal[6:0] <= ((mantsum[8]==1'b1) ? (mantsum >> 1) : (mantsum << leadzeroes_addf)); //-1 lead zeroes in first case
-             outputVal[14:7] <= shift - leadzeroes_addf + (mantsum[8]==1'b1);
-         end
 
 	//conversion from integer to float based on whether value is 0, positive, or negative
         `OPitof: begin 

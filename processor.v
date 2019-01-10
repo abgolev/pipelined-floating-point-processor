@@ -79,7 +79,7 @@ module processor(halt, reset, clk);
         reg `WORD op2_prev_opp, op2_opp; //used for itof
 
         //Used for float functions
-        reg `WORD mantissa;
+        reg `WORD mantissa, mantissa_old, testytest;
         reg[7:0] shift;
 
        //Used for addf and subf
@@ -93,7 +93,7 @@ module processor(halt, reset, clk);
         reg[7:0] s8;
         reg[3:0] s4;
         reg[1:0] s2;
-        reg[4:0] leadzeroes;
+        reg[4:0] leadzeroes, leadzeroes_old;
        
 /*
 Stage 0 (owns PC)
@@ -134,15 +134,8 @@ Stage 1
 */
 
     always @(posedge clk) begin
-      //set PRE val
-      if (instrmem[PC_in1-frz][15:14] == 2'b11) begin
-          PREval<=instrmem[PC_in1-frz][11:0];
-           frz <= 0; 
-           if( !((instrmem[PC_in1-frz] `CC == `EQ && Zflag==0) || (instrmem[PC_in1-frz] `CC == `NE && Zflag==1))) begin
-              ir_in2 <= instrmem[PC_in1-frz];
-              PC_in2 <= PC_in1;
-           end
-      end else if (ir_in0 `Dest == 4'b1111) begin
+
+      if (ir_in0 `Dest == 4'b1111) begin
             #0;	 //do nothing. this is neccessary because it gets confused with the 2'b11 in the PRE instruction
 
       //check for dependencies. send set frz flag and send nops until resolved
@@ -164,13 +157,23 @@ Stage 1
           ir_in2 <= `NOP;
           frz <= 1; 
 
+      //set PRE val
+      end else if (instrmem[PC_in1-frz][15:14] == 2'b11) begin
+           if( !((instrmem[PC_in1-frz][13:12] == `EQ && Zflag==0) || (instrmem[PC_in1-frz][13:12] == `NE && Zflag==1))) begin
+              PREval<=instrmem[PC_in1-frz][11:0];
+              ir_in2 <= instrmem[PC_in1-frz];
+              PC_in2 <= PC_in1;
+              testytest <= instrmem[PC_in1-frz];
+          end
+          frz <= 0; 
+
       //do nothing if conditional EQ or NE instruction and Z-flag does not match
       end else begin 
-          frz <= 0; 
           if( !((instrmem[PC_in1-frz] `CC == `EQ && Zflag==0) || (instrmem[PC_in1-frz] `CC == `NE && Zflag==1))) begin
               ir_in2 <= instrmem[PC_in1-frz];
               PC_in2 <= PC_in1;
           end
+          frz <= 0; 
       end
     end
 
@@ -186,18 +189,18 @@ Stage 2
        if(ir_in2[15:14] ==`OPpre) PREflag<=1;
        op1_prev <= regfile[ir_in2 `Dest];
 
-	//Op2 is reg
+	//if Op2 is reg
         if (ir_in2 `isReg == 1) begin
           op2_prev <= regfile[ir_in2 `Op2];
           op2_prev_opp <= -regfile[ir_in2 `Op2];
 
-	//Op2 is long immed
+	//if Op2 is long immed
         end else if (PREflag && (ir_in2!=`NOP)) begin
           op2_prev <= {PREval, ir_in2 `Op2};
           op2_prev_opp <= -{PREval, ir_in2 `Op2};
           PREflag <=0;
 
-	//Op2 is short immed
+	//if Op2 is short immed
         end else begin
           op2_prev <= {{12{ir_in2[3]}}, ir_in2 `Op2};
           op2_prev_opp <= -{{12{ir_in2[3]}}, ir_in2 `Op2};
@@ -228,7 +231,7 @@ Stage 2.5
                     mantissa2<={1'b1, op2_prev[6:0]};
                     shift <= op2_prev[14:7];
                  end else begin
-                    mantissa1<={1'b1, op1_prev[6:0]};
+                    mantissa1 <={1'b1, op1_prev[6:0]};
                     mantissa2<=0; 
                     shift <= op1_prev[14:7];
                  end
@@ -240,7 +243,7 @@ Stage 2.5
                  by1 = (shiftdif[0] ? {2'b01, op2_prev[6:1]} : {1'b1, op2_prev[6:0]});
                  by2 = (shiftdif[1] ? {3'b001, op2_prev[6:2]} : by1);
                  by4 = (shiftdif[2] ? {5'b00001, op2_prev[6:4]} : by2);
-                 mantissa2 = {1'b1, (shiftdif[7:3] ? 0 : by4)};
+                 mantissa2 <= {1'b1, (shiftdif[7:3] ? 0 : by4)};
                  mantissa1 <= {1'b1, op1_prev[6:0]};
                  shift <= op1_prev[14:7];
              end else begin
@@ -258,48 +261,63 @@ Stage 2.5
           if(op2_prev[15:0] == 0) begin
             leadzeroes<=5'b1000;
           end else if (op2_prev[15]==0) begin
-            leadzeroes[4] =0;
-            {leadzeroes[3],s8} = ((|op2_prev[15:8]) ? {1'b0, op2_prev[15:8]} : {1'b1, op2_prev[7:0]});
-            {leadzeroes[2],s4} = ((|s8[7:4]) ? {1'b0, s8[7:4]} : {1'b1, s8[3:0]});
-            {leadzeroes[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
+            leadzeroes[4]<=0;
+            {leadzeroes_old[3],s8} = ((|op2_prev[15:8]) ? {1'b0, op2_prev[15:8]} : {1'b1, op2_prev[7:0]});
+            leadzeroes[3] <= leadzeroes_old[3];
+            {leadzeroes_old[2],s4} = ((|s8[7:4]) ? {1'b0, s8[7:4]} : {1'b1, s8[3:0]});
+            leadzeroes[2] <= leadzeroes_old[2];
+            {leadzeroes_old[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
+            leadzeroes[1] <= leadzeroes_old[1];
              leadzeroes[0] <= !s2[1];
           end else if (op2_prev[15]==1) begin
-            leadzeroes[4] =0;
-            {leadzeroes[3],s8} = ((|op2_prev_opp[15:8]) ? {1'b0, op2_prev_opp[15:8]} : {1'b1, op2_prev_opp[7:0]});
-            {leadzeroes[2],s4} = ((|s8[7:4]) ? {1'b0, s8[7:4]} : {1'b1, s8[3:0]});
-            {leadzeroes[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
+            leadzeroes[4]<=0;
+            {leadzeroes_old[3],s8} = ((|op2_prev_opp[15:8]) ? {1'b0, op2_prev_opp[15:8]} : {1'b1, op2_prev_opp[7:0]});
+             leadzeroes[3] <= leadzeroes_old[3];
+            {leadzeroes_old[2],s4} = ((|s8[7:4]) ? {1'b0, s8[7:4]} : {1'b1, s8[3:0]});
+            leadzeroes[2] <= leadzeroes_old[2];
+            {leadzeroes_old[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
+            leadzeroes[1] <= leadzeroes_old[1];
              leadzeroes[0] <= !s2[1];
           end
       end
  
       //store mantissa and exp
       if(ir_inF `Opcode == `OPftoi) begin
-             //mantissa <= ( (op2_prev[15] == 1'b0) ? {9'b000000001, op2_prev[6:0]} : {9'b111111111, op2_prev[6:0]} ); //lead ones if it's a negative number
              mantissa <= {1'b1, op2_prev[6:0]};
              shift <= (op2_prev[14:7] - 134);
       end
 
       //store mantissa and exp; count lead zeroes
       if(ir_inF `Opcode == `OPmulf) begin
-             mantissa = {1'b1, op2_prev[6:0]} * {1'b1, op1_prev[6:0]};
-             shift <= (op2_prev[14:7] - 134) + (op1_prev[14:7] - 134);
-             leadzeroes[4] =0;
-             {leadzeroes[3],s8} = ((|mantissa[15:8]) ? {1'b0, mantissa[15:8]} : {1'b1, mantissa[7:0]});
-             {leadzeroes[2],s4} = ((|s8[7:4]) ? {1'b0, s8[7:4]} : {1'b1, s8[3:0]});
-             {leadzeroes[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
-             leadzeroes[0] = !s2[1];
+             if(op2_prev[15:0] == 0 || op1_prev[15:0]==0) begin  //used for the denormalized 0 multiplication
+                mantissa<=0;
+             end else begin 
+               mantissa_old = {1'b1, op2_prev[6:0]} * {1'b1, op1_prev[6:0]};
+               mantissa <= mantissa_old;
+               shift <= (op2_prev[14:7] - 134) + (op1_prev[14:7] - 134);
+               leadzeroes[4]<=0;
+               {leadzeroes_old[3],s8} = ((|mantissa_old[15:8]) ? {1'b0, mantissa_old[15:8]} : {1'b1, mantissa_old[7:0]});
+               leadzeroes[3] <= leadzeroes_old[3];
+               {leadzeroes_old[2],s4} = ((|s8[7:4]) ? {1'b0, s8[7:4]} : {1'b1, s8[3:0]});
+               leadzeroes[2] <= leadzeroes_old[2];
+               {leadzeroes_old[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
+               leadzeroes[1] <= leadzeroes_old[1];
+               leadzeroes[0] <= !s2[1];
+            end
       end
 
       //store mantissa and exp; count lead zeroes
       if(ir_inF `Opcode == `OPrecf) begin
-             mantissa = reclookup[op2_prev[6:0]];
+             mantissa_old = reclookup[op2_prev[6:0]];
+             mantissa <= mantissa_old;
              shift <= ((op2_prev[6:0]==0) ? (121) : (120));
-             leadzeroes[4] =0;
-             leadzeroes[3] =0;
-             {leadzeroes[2],s4} = ((|mantissa[7:4]) ? {1'b0, mantissa[7:4]} : {1'b1, mantissa[3:0]});
-             {leadzeroes[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
-             leadzeroes[0] = !s2[1];
-             
+             leadzeroes[4]<=0;
+             leadzeroes[3]<=0;
+             {leadzeroes_old[2],s4} = ((|mantissa_old[7:4]) ? {1'b0, mantissa_old[7:4]} : {1'b1, mantissa_old[3:0]});
+             leadzeroes[2] <= leadzeroes_old[2];
+             {leadzeroes_old[1],s2} = ((|s4[3:2]) ? {1'b0, s4[3:2]} : {1'b1, s4[1:0]});
+             leadzeroes[1] <= leadzeroes_old[1];
+             leadzeroes[0]<= !s2[1];
       end
 
       //nonfloats just chill

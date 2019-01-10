@@ -79,7 +79,7 @@ module processor(halt, reset, clk);
         reg `WORD op2_prev_opp, op2_opp; //used for itof
 
         //Used for float functions
-        reg `WORD mantissa, mantissa_old, testytest;
+        reg `WORD mantissa, mantissa_old;
         reg[7:0] shift;
 
        //Used for addf and subf
@@ -163,8 +163,7 @@ Stage 1
               PREval<=instrmem[PC_in1-frz][11:0];
               ir_in2 <= instrmem[PC_in1-frz];
               PC_in2 <= PC_in1;
-              testytest <= instrmem[PC_in1-frz];
-          end
+           end
           frz <= 0; 
 
       //do nothing if conditional EQ or NE instruction and Z-flag does not match
@@ -459,7 +458,7 @@ processor PE(halted,reset,clk);
 initial begin
     $dumpfile;                                             
     $dumpvars(0,PE);       
-    $dumpvars(0, PE, PE.regfile[0],PE.regfile[1],PE.regfile[2], PE.regfile[3]);      
+    $dumpvars(0, PE, PE.regfile[0],PE.regfile[1],PE.regfile[2], PE.regfile[3], PE.regfile[15]);      
     #10 reset = 1;
     #10 reset = 0;
     while (!halted) begin

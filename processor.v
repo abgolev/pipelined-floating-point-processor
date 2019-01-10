@@ -335,9 +335,13 @@ Stage 3
 */
   always @(posedge clk) begin
     //if statement to check for first time around
-    if(ir_in3 === 16'bxxxxxxxxxxxxxxxx || ir_in3 === 16'b1xxxxxxxxxxxxxxx || ir_in3 [15:14] == `OPpre) begin 
+    //if(ir_in3 === 16'bxxxxxxxxxxxxxxxx || ir_in3 === 16'b1xxxxxxxxxxxxxxx || ir_in3 [15:14] == `OPpre) begin 
+    if(ir_in3 === 16'bxxxxxxxxxxxxxxxx || ir_in3 === 16'b1xxxxxxxxxxxxxxx) begin 
        #0;
+    end else if(ir_in3 [15:14] == `OPpre) begin
+        regWrite<=0;
     end else if (ir_in3 `Opcode == `OPaddf || ir_in3 `Opcode == `OPsubf) begin //same process for addf and subf
+        regWrite<=1;
         if(op1[15] ^ op2[15]) begin //if the two values have different signs
            if(mantissa1 > mantissa2) begin
               mantsum = mantissa1 - mantissa2;
@@ -395,6 +399,7 @@ Stage 3
 
 	//conversion from float to int
         `OPftoi: begin
+            regWrite<=1;
             if(op2==0) begin
                 outputVal<=0;
             end else begin
@@ -409,6 +414,7 @@ Stage 3
 
 	//float multiplication
         `OPmulf: begin 
+             regWrite<=1;
              if(mantissa==0) begin
                 outputVal<=0;
              end else begin
@@ -420,6 +426,7 @@ Stage 3
 
 	//float reciprocal
          `OPrecf: begin 
+              regWrite<=1;
               if(op2==0) begin
                  outputVal<=0;
               end else begin
@@ -453,6 +460,7 @@ endmodule
 module testbench;
 reg reset = 0;
 reg clk = 0;
+reg stop = 0;
 wire halted;
 processor PE(halted,reset,clk);
 initial begin
@@ -461,9 +469,10 @@ initial begin
     $dumpvars(0, PE, PE.regfile[0],PE.regfile[1],PE.regfile[2], PE.regfile[3], PE.regfile[15]);      
     #10 reset = 1;
     #10 reset = 0;
-    while (!halted) begin
+    while (!halted && stop<1000) begin //stop<1000 to prevent infinite loops
         #10 clk = 1;
         #10 clk = 0;
+        stop = stop + 1;
     end
     $finish;
 end

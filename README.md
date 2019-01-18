@@ -8,3 +8,6 @@ To use this processor, first, a basic PinKY program has to be written and then a
 The  instructions are placed int VMEM0. VMEM1 holds the 16 registers and is instantiated as an array of 0's. VMEM2 holds the main memory and is also instantiated as an array of 0's. VMEM3 is a reciprocal lookup table used for the recf function. 
 
 The line $dumpvars(0,PE,PE.regfile[...]) in the testbench can be used used to print the contents of any of the registers.
+
+The processor can be tested using the Icarus Verilog Simulator CGI Interface:
+http://super.ece.engr.uky.edu:8088/cgi-bin/iver.cgi

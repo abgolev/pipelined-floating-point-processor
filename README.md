@@ -11,3 +11,7 @@ The line $dumpvars(0,PE,PE.regfile[...]) in the testbench can be used used to pr
 
 The processor can be tested using the Icarus Verilog Simulator CGI Interface:
 http://super.ece.engr.uky.edu:8088/cgi-bin/iver.cgi
+
+Known Bugs:
+1. The reciprocal function is still inaccurate in some cases.
+2. The final instruction of the program must be a system call, or else it causes an infinite loop.

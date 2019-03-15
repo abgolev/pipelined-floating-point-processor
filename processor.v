@@ -114,7 +114,7 @@ Stage 0 (owns PC)
           PC_in1 <= outputVal;
           regfile[15] <=outputVal;
           frz<=0;
-      end else if(!frz) begin    //processing regular instrs that aren't jpms
+      end else if(!frz) begin    //processing regular instrs that aren't jmps
           PC_in0 <= PC_in0 + 1;
           PC_in1 <= PC_in0;
           if(PC_in3===16'bxxxxxxxxxxxxxxxx) begin
@@ -128,7 +128,7 @@ Stage 0 (owns PC)
 /*
 Stage 1
 -fetch an instruction from memory
--set PREval
+-set PRE val
 -handle dependencies
 -checks conditionals for EQ and NE
 */
@@ -136,23 +136,23 @@ Stage 1
     always @(posedge clk) begin
 
       if (ir_in0 `Dest == 4'b1111) begin
-            #0;	 //do nothing. this is neccessary because it gets confused with the 2'b11 in the PRE instruction
+            #0;	 //do nothing. this is necessary because it gets confused with the 2'b11 in the PRE instruction
 
       //check for dependencies. send set frz flag and send nops until resolved
-      end else if ((ir_in3 `Dest == 4'b1111) ||
+      end else if ((ir_in3 `Dest == 4'b1111) || //writing to the pc register
           (ir_in2 `Dest == 4'b1111) || 
           (ir_in0 `Dest == 4'b1111) || 
           (ir_inF `Dest == 4'b1111) ||
-          ((instrmem[PC_in1-frz] `isReg) && (instrmem[PC_in1-frz] `Op2 == ir_in3 `Dest)) || 
+          ((instrmem[PC_in1-frz] `isReg) && (instrmem[PC_in1-frz] `Op2 == ir_in3 `Dest)) || //read dependencies 
           ((instrmem[PC_in1-frz] `isReg) && (instrmem[PC_in1-frz] `Op2 == ir_in2 `Dest)) || 
           ((instrmem[PC_in1-frz] `isReg) && (instrmem[PC_in1-frz] `Op2 == ir_in0 `Dest)) || 
           ((instrmem[PC_in1-frz] `isReg) && (instrmem[PC_in1-frz] `Op2 == ir_inF `Dest)) ||
-          (instrmem[PC_in1-frz] `Dest == ir_in3 `Dest) ||
+          (instrmem[PC_in1-frz] `Dest == ir_in3 `Dest) || //write dependencies
           (instrmem[PC_in1-frz] `Dest == ir_in2 `Dest) ||
           (instrmem[PC_in1-frz] `Dest == ir_in0 `Dest) ||
           (instrmem[PC_in1-frz] `Dest == ir_inF `Dest) ||
-          (ir_in0 `CC == `S) || (ir_in2 `CC == `S) || (ir_in3 `CC == `S) || (ir_inF `CC == `S) ||
-          ((instrmem[PC_in1-frz] == `OPldr) && ((ir_in0 `Opcode  == `OPstr) || (ir_in2 `Opcode  == `OPstr) || (ir_inF `Opcode  == `OPstr) || (ir_in3 `Opcode  == `OPstr))) ||
+          (ir_in0 `CC == `S) || (ir_in2 `CC == `S) || (ir_in3 `CC == `S) || (ir_inF `CC == `S) || //conditional dependencies
+          ((instrmem[PC_in1-frz] == `OPldr) && ((ir_in0 `Opcode  == `OPstr) || (ir_in2 `Opcode  == `OPstr) || (ir_inF `Opcode  == `OPstr) || (ir_in3 `Opcode  == `OPstr))) || //load/store dependencies
           ((instrmem[PC_in1-frz] == `OPstr) && ((ir_in0 `Opcode  == `OPldr) || (ir_in2 `Opcode  == `OPldr) || (ir_inF `Opcode  == `OPldr) || (ir_in3 `Opcode  == `OPldr)))) begin
           ir_in2 <= `NOP;
           frz <= 1; 

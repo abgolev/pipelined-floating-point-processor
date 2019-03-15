@@ -1,5 +1,5 @@
 # pipelined-floating-point-processor
-Verilog implementation of a five-stage floating point pipelined processor based on the PinKY instruction set. This implementation is able to handle conditional and write dependencies as well as jumps. 
+Verilog implementation of a five-stage floating point pipelined processor based on the PinKY instruction set. 
 
 The PinKY assembly language is a simple architecture with a variety of similarities to ARM that was built by Prof. Hank Dietz specifically for use by the University of Kentucky’s EE480 courses. A detailed description of PinKY can be found here: http://aggregate.org/EE480/pinky.html
 
@@ -11,3 +11,7 @@ The line $dumpvars(0,PE,PE.regfile[...]) in the testbench can be used used to pr
 
 The processor can be tested using the Icarus Verilog Simulator CGI Interface:
 http://super.ece.engr.uky.edu:8088/cgi-bin/iver.cgi
+
+Known Bugs:
+1. The reciprocal function is still inaccurate in some cases.
+2. The final instruction of the program must be a system call, or else it causes an infinite loop.

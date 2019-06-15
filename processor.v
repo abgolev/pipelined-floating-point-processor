@@ -6,15 +6,15 @@
 `define REG [3:0]
 
 //Instruction Encoding (format of AIK generated assembly code)
-`define Opcode [15:11]
-`define CC [10:9]
-`define AL 2'b00
-`define S   2'b01
-`define EQ 2'b10
-`define NE 2'b11
-`define isReg [8]
-`define Dest [7:4]
-`define Op2 [3:0]
+`define Opcode [15:11]	
+`define CC [10:9]	//conditional code
+`define AL 2'b00	//always
+`define S  2'b01	//set
+`define EQ 2'b10	//equal (Z flag = 1)
+`define NE 2'b11	//not equal (Z flag = 0)
+`define isReg [8]	//0 if constant; 1 if register
+`define Dest [7:4]	//destination register
+`define Op2 [3:0]	//register or constant
 
 //OPcodes w/ matching State #s
 `define OPadd 5'b00000
@@ -52,10 +52,10 @@ module processor(halt, reset, clk);
     reg[7:0] reclookup [127:0];	    //lookup table for reciprocals
     reg init;
     reg frz;
-    reg Zflag;
+    reg Zflag;			//conditional code is Set && output==0?
     reg PREflag; 		//is PRE set?
     reg `PRESIZE PREval; 	//PRE val
-    reg regWrite; 		//do we write to reg?
+    reg regWrite; 		//write to reg?
 
     always @(reset) begin
         halt = 0;
@@ -73,15 +73,17 @@ module processor(halt, reset, clk);
            
         reg `WORD ir_in0, ir_in1, ir_in2, ir_inF, ir_in3;
         reg `WORD PC_in0, PC_in1, PC_in2, PC_inF, PC_in3;
-        reg `WORD outputVal; //write output to ALU or MEM
+        reg `WORD outputVal; //output
         reg `WORD op1, op2;
-	reg `WORD op1_prev, op2_prev; //used for the float stage
-        reg `WORD op2_prev_opp, op2_opp; //used for itof
-
-        //Used for float functions
+	
+	//Everything under this used for floating point ALU
+	reg `WORD op1_prev, op2_prev;
         reg `WORD mantissa, mantissa_old;
         reg[7:0] shift;
-
+	
+	//Used for itof
+	reg `WORD op2_prev_opp, op2_opp; 
+	
        //Used for addf and subf
         reg[7:0] shiftdif, shiftdif2;
         reg[7:0] mantissa1, mantissa2;
@@ -135,10 +137,11 @@ Stage 1
 
     always @(posedge clk) begin
 
+      //nop necessary to avoid confusion with 2'b11 in the PRE instruction
       if (ir_in0 `Dest == 4'b1111) begin
-            #0;	 //do nothing. this is necessary because it gets confused with the 2'b11 in the PRE instruction
+            #0;	 
 
-      //check for dependencies. send set frz flag and send nops until resolved
+      //check for dependencies; if found, set frz flag and send nops until resolved
       end else if ((ir_in3 `Dest == 4'b1111) || //writing to the pc register
           (ir_in2 `Dest == 4'b1111) || 
           (ir_in0 `Dest == 4'b1111) || 
@@ -166,7 +169,7 @@ Stage 1
            end
           frz <= 0; 
 
-      //do nothing if conditional EQ or NE instruction and Z-flag does not match
+      //do nothing if Z-flag does not match conditional code for EQ or NE
       end else begin 
           if( !((instrmem[PC_in1-frz] `CC == `EQ && Zflag==0) || (instrmem[PC_in1-frz] `CC == `NE && Zflag==1))) begin
               ir_in2 <= instrmem[PC_in1-frz];

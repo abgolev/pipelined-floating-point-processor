@@ -467,9 +467,9 @@ reg stop = 0;
 wire halted;
 processor PE(halted,reset,clk);
 initial begin
-    $dumpfile;                                             
-    $dumpvars(0,PE);       
-    $dumpvars(0, PE, PE.regfile[0],PE.regfile[1],PE.regfile[2], PE.regfile[3], PE.regfile[15]);      
+    $dumpfile;
+    $dumpvars(0, PE.regfile[0],PE.regfile[1],PE.regfile[2], PE.regfile[3], PE.regfile[15], PE);   
+    $dumpvars(0,PE);      
     #10 reset = 1;
     #10 reset = 0;
     while (!halted && stop<1000) begin //stop<1000 to prevent infinite loops

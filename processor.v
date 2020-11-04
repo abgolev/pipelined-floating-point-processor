@@ -197,7 +197,8 @@ Stage 2
           op2_prev_opp <= -regfile[ir_in2 `Op2];
 
 	//if Op2 is long immed
-        end else if (PREflag && (ir_in2!=`NOP)) begin
+	//end else if (PREflag && (ir_in2!=`NOP)) begin
+	end else if (PREflag && ir_in2!==16'b1xxxxxxxxxxxxxxx && ir_in2 [15:14] != `OPpre) begin
           op2_prev <= {PREval, ir_in2 `Op2};
           op2_prev_opp <= -{PREval, ir_in2 `Op2};
           PREflag <=0;

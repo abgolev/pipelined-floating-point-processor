@@ -154,7 +154,7 @@ Stage 1
           (instrmem[PC_in1-frz] `Dest == ir_in2 `Dest) ||
           (instrmem[PC_in1-frz] `Dest == ir_in0 `Dest) ||
           (instrmem[PC_in1-frz] `Dest == ir_inF `Dest) ||
-          (ir_in0 `CC == `S) || (ir_in2 `CC == `S) || (ir_in3 `CC == `S) || (ir_inF `CC == `S) || //conditional dependencies
+          ((instrmem[PC_in1-frz] `CC == `EQ || instrmem[PC_in1-frz] `CC == `NE) &&  ((ir_in0 `CC == `S) || (ir_in2 `CC == `S) || (ir_in3 `CC == `S) || (ir_inF `CC == `S))) || //conditional dependencies
           ((instrmem[PC_in1-frz] == `OPldr) && ((ir_in0 `Opcode  == `OPstr) || (ir_in2 `Opcode  == `OPstr) || (ir_inF `Opcode  == `OPstr) || (ir_in3 `Opcode  == `OPstr))) || //load/store dependencies
           ((instrmem[PC_in1-frz] == `OPstr) && ((ir_in0 `Opcode  == `OPldr) || (ir_in2 `Opcode  == `OPldr) || (ir_inF `Opcode  == `OPldr) || (ir_in3 `Opcode  == `OPldr)))) begin
           ir_in2 <= `NOP;

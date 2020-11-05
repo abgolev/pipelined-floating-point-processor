@@ -378,7 +378,7 @@ Stage 3
         `OPorr: begin outputVal<=op1|op2; regWrite<=1; end
         `OPeor: begin outputVal<=op1^op2; regWrite<=1; end
         `OPbic: begin outputVal<=op1&~op2; regWrite<=1; end
-        `OPslt: begin outputVal<=((op1[0]==1'b1^op2[0]==1'b1) ? (op1[0]==1'b1) : (op1<op2)); regWrite<=1; end
+	`OPslt: begin outputVal<=((op1[15]==1'b1^op2[15]==1'b1) ? (op1[15]==1'b1) : (op1<op2)); regWrite<=1; end
         `OPmov: begin outputVal<=op2; regWrite<=1; end
         `OPneg: begin outputVal<=-1*op2; regWrite<=1; end
         `OPsha: begin outputVal<=((op2>0) ? (op1 << op2) : (op1 >> -1*op2)); regWrite<=1; end

@@ -3,6 +3,7 @@ Verilog implementation of a five-stage floating point pipelined processor based 
 
 To run on terminal shell, enter instructions in vmem0.vmem and then:
 > iverilog shellproc.v
+
 > ./a.out
 
 To run testing mode on a number of different prebuilt instructions:

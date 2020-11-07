@@ -154,7 +154,7 @@ Stage 1
           (instrmem[PC_in1-frz] `Dest == ir_in2 `Dest) ||
           (instrmem[PC_in1-frz] `Dest == ir_in0 `Dest) ||
           (instrmem[PC_in1-frz] `Dest == ir_inF `Dest) ||
-          (ir_in0 `CC == `S) || (ir_in2 `CC == `S) || (ir_in3 `CC == `S) || (ir_inF `CC == `S) || //conditional dependencies
+          ((instrmem[PC_in1-frz] `CC == `EQ || instrmem[PC_in1-frz] `CC == `NE) &&  ((ir_in0 `CC == `S) || (ir_in2 `CC == `S) || (ir_in3 `CC == `S) || (ir_inF `CC == `S))) || //conditional dependencies
           ((instrmem[PC_in1-frz] == `OPldr) && ((ir_in0 `Opcode  == `OPstr) || (ir_in2 `Opcode  == `OPstr) || (ir_inF `Opcode  == `OPstr) || (ir_in3 `Opcode  == `OPstr))) || //load/store dependencies
           ((instrmem[PC_in1-frz] == `OPstr) && ((ir_in0 `Opcode  == `OPldr) || (ir_in2 `Opcode  == `OPldr) || (ir_inF `Opcode  == `OPldr) || (ir_in3 `Opcode  == `OPldr)))) begin
           ir_in2 <= `NOP;
@@ -197,7 +197,8 @@ Stage 2
           op2_prev_opp <= -regfile[ir_in2 `Op2];
 
 	//if Op2 is long immed
-        end else if (PREflag && (ir_in2!=`NOP)) begin
+	//end else if (PREflag && (ir_in2!=`NOP)) begin
+	end else if (PREflag && ir_in2!==16'b1xxxxxxxxxxxxxxx && ir_in2 [15:14] != `OPpre) begin
           op2_prev <= {PREval, ir_in2 `Op2};
           op2_prev_opp <= -{PREval, ir_in2 `Op2};
           PREflag <=0;
@@ -377,7 +378,7 @@ Stage 3
         `OPorr: begin outputVal<=op1|op2; regWrite<=1; end
         `OPeor: begin outputVal<=op1^op2; regWrite<=1; end
         `OPbic: begin outputVal<=op1&~op2; regWrite<=1; end
-        `OPslt: begin outputVal<=op1<op2; regWrite<=1; end
+	`OPslt: begin outputVal<=((op1[15]==1'b1^op2[15]==1'b1) ? (op1[15]==1'b1) : (op1<op2)); regWrite<=1; end
         `OPmov: begin outputVal<=op2; regWrite<=1; end
         `OPneg: begin outputVal<=-1*op2; regWrite<=1; end
         `OPsha: begin outputVal<=((op2>0) ? (op1 << op2) : (op1 >> -1*op2)); regWrite<=1; end
@@ -467,9 +468,9 @@ reg stop = 0;
 wire halted;
 processor PE(halted,reset,clk);
 initial begin
-    $dumpfile;                                             
-    $dumpvars(0,PE);       
-    $dumpvars(0, PE, PE.regfile[0],PE.regfile[1],PE.regfile[2], PE.regfile[3], PE.regfile[15]);      
+    $dumpfile;
+    $dumpvars(0, PE.regfile[0],PE.regfile[1],PE.regfile[2], PE.regfile[3], PE.regfile[15], PE);   
+    $dumpvars(0,PE);      
     #10 reset = 1;
     #10 reset = 0;
     while (!halted && stop<1000) begin //stop<1000 to prevent infinite loops
